@@ -1,0 +1,18 @@
+{
+  "dataset": "taps",
+  "stage": "raw",
+  "rows": 50859,
+  "missing_columns": [],
+  "new_columns": [],
+  "expected_schema": {
+    "day": "Date",
+    "event_data": "Struct({'position': Int64, 'value_prop': String})",
+    "user_id": "Int64"
+  },
+  "source_columns": [
+    "day",
+    "event_data",
+    "user_id"
+  ],
+  "ok": true
+}

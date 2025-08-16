@@ -1,0 +1,2 @@
+[console_scripts]
+etl-run = apps.runner:main

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mercadolibre-senior-dataengineer-test"
+version = "0.1.0"
+description = "ETL pays/taps/prints with Polars, schema validations, and clean structure"
+requires-python = ">=3.10"
+dependencies = ["polars==1.32.3", "python-dotenv==1.1.1", "structlog==25.4.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "src*"]
+
+[project.scripts]
+etl-run = "apps.runner:main"

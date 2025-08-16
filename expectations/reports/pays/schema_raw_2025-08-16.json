@@ -1,0 +1,20 @@
+{
+  "dataset": "pays",
+  "stage": "raw",
+  "rows": 756483,
+  "missing_columns": [],
+  "new_columns": [],
+  "expected_schema": {
+    "pay_date": "Date",
+    "total": "Float64",
+    "user_id": "Int64",
+    "value_prop": "String"
+  },
+  "source_columns": [
+    "pay_date",
+    "total",
+    "user_id",
+    "value_prop"
+  ],
+  "ok": true
+}
