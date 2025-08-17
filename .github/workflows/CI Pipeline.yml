@@ -5,11 +5,11 @@ on:
     branches: [ master ]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: CI Pipeline-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  ci:
+  CI Pipeline:
     runs-on: ubuntu-latest
 
     steps:
