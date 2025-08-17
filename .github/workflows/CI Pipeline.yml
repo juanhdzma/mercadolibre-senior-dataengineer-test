@@ -25,25 +25,22 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # instala tus deps del proyecto
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          # herramientas de CI
+          pip install -r requirements.txt
           pip install pytest pytest-cov flake8 mypy bandit pip-audit
 
       # -------- TIPADO --------
       - name: Type check (mypy)
-        run: mypy src tests
+        run: mypy src tests apps
 
       # -------- LINT --------
       - name: Lint (flake8)
-        run: flake8 src tests
+        run: flake8 src tests apps
 
       # -------- SEGURIDAD: BANDIT --------
       # Falla con cualquier hallazgo (low/medium/high con cualquier nivel de confianza)
       - name: Security scan (Bandit)
         run: |
-          bandit -r src --severity-level low --confidence-level low -f txt -o bandit-report.txt
+          bandit -r src/ apps/ --severity-level low --confidence-level low -f txt -o bandit-report.txt
           cat bandit-report.txt
 
       - name: Upload Bandit report
@@ -55,16 +52,7 @@ jobs:
 
       # -------- SEGURIDAD: DEPENDENCIAS --------
       - name: Dependency audit (pip-audit)
-        run: |
-          # Audita archivos de requirements si existen; en proyectos con -e, saltar editables
-          if [ -f requirements.txt ] || [ -f requirements-dev.txt ]; then
-            ARGS=""
-            if [ -f requirements.txt ]; then ARGS="$ARGS -r requirements.txt"; fi
-            if [ -f requirements-dev.txt ]; then ARGS="$ARGS -r requirements-dev.txt"; fi
-            pip-audit $ARGS --strict
-          else
-            pip-audit --skip-editable --strict
-          fi
+        run: pip-audit
 
       # -------- TESTS + COVERAGE --------
       - name: Tests + coverage
@@ -72,7 +60,8 @@ jobs:
           pytest --maxfail=1 -ra \
                  --cov=src \
                  --cov-report=term-missing \
-                 --cov-report=xml
+                 --cov-report=xml \
+                 --cov-fail-under=80
 
       - name: Upload coverage.xml
         if: always()
