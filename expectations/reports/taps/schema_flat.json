@@ -1,7 +1,7 @@
 {
   "dataset": "taps",
   "stage": "flat",
-  "rows": 5,
+  "rows": 50859,
   "missing_columns": [],
   "ok": true
 }

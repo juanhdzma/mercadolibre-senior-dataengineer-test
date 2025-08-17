@@ -1,7 +1,7 @@
 {
   "dataset": "prints",
   "stage": "flat",
-  "rows": 11,
+  "rows": 508617,
   "missing_columns": [],
   "ok": true
 }

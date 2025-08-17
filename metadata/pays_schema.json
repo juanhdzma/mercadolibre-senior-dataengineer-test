@@ -1,0 +1,22 @@
+{
+    "dataset": "pays",
+    "description": "Pagos realizados en la plataforma",
+    "columns": {
+        "pay_date": {
+            "type": "date",
+            "description": "Fecha en que se registró el pago"
+        },
+        "total": {
+            "type": "float64",
+            "description": "Monto pagado en pesos colombianos"
+        },
+        "user_id": {
+            "type": "int64",
+            "description": "Identificador único del usuario"
+        },
+        "value_prop": {
+            "type": "string",
+            "description": "Categoría del producto o servicio asociado al pago"
+        }
+    }
+}

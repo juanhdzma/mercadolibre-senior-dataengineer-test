@@ -1,0 +1,28 @@
+{
+    "dataset": "prints",
+    "description": "Eventos de impresión (visualización) de opciones en la interfaz",
+    "columns": {
+        "day": {
+            "type": "date",
+            "description": "Día en que se registró la impresión"
+        },
+        "event_data": {
+            "type": "object",
+            "description": "Objeto con información del evento",
+            "properties": {
+                "position": {
+                    "type": "int64",
+                    "description": "Posición en la interfaz del elemento mostrado"
+                },
+                "value_prop": {
+                    "type": "string",
+                    "description": "Categoría o acción asociada al elemento mostrado"
+                }
+            }
+        },
+        "user_id": {
+            "type": "int64",
+            "description": "Identificador único del usuario al que se le mostró el elemento"
+        }
+    }
+}

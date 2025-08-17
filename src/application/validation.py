@@ -8,6 +8,7 @@ import polars as pl
 from src.adapters.logging import get_logger
 from src.domain.schema_registry import DatasetSpec
 from typing import Type, Union, TypeAlias, cast
+from src.config.paths import EXPECTATIONS_REPORTS_DIR
 
 PolarsDType: TypeAlias = Union[Type[pl.DataType], pl.DataType]
 TemporalDType: TypeAlias = Union[
@@ -15,8 +16,6 @@ TemporalDType: TypeAlias = Union[
 ]
 
 log = get_logger()
-
-REPORT_BASE = Path(__file__).resolve().parents[2] / "expectations" / "reports"
 
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?((\d+(\.\d*)?)|(\.\d+))([eE][+-]?\d+)?$")
@@ -242,7 +241,7 @@ def validate_raw_schema(
                 spec.raw_path, spec.raw_schema
             )
     except Exception as e:
-        out_dir = REPORT_BASE / spec.name
+        out_dir = EXPECTATIONS_REPORTS_DIR / spec.name
         out_path = out_dir / "schema_raw.json"
         report = {
             "dataset": spec.name,
@@ -270,7 +269,7 @@ def validate_raw_schema(
         if n > 0
     ]
 
-    out_dir = REPORT_BASE / spec.name
+    out_dir = EXPECTATIONS_REPORTS_DIR / spec.name
     out_path = out_dir / "schema_raw.json"
     ok = (
         (not missing)

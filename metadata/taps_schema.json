@@ -1,0 +1,28 @@
+{
+    "dataset": "taps",
+    "description": "Eventos de interacción (taps) de los usuarios en la interfaz",
+    "columns": {
+        "day": {
+            "type": "date",
+            "description": "Día en que se registró el evento"
+        },
+        "event_data": {
+            "type": "object",
+            "description": "Objeto con información del evento",
+            "properties": {
+                "position": {
+                    "type": "int64",
+                    "description": "Posición del elemento en la interfaz en el que se hizo tap"
+                },
+                "value_prop": {
+                    "type": "string",
+                    "description": "Categoría o acción asociada al tap"
+                }
+            }
+        },
+        "user_id": {
+            "type": "int64",
+            "description": "Identificador único del usuario que hizo el tap"
+        }
+    }
+}
