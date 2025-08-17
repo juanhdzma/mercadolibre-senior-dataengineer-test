@@ -1,8 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-import polars as pl
+from typing import TypeAlias, Union, Type
 import os
+import polars as pl
+
+
+_PolarsBase = pl.DataType
+PolarsDType: TypeAlias = Union[Type[_PolarsBase], _PolarsBase]
 
 
 @dataclass(frozen=True)
@@ -10,24 +15,28 @@ class DatasetSpec:
     name: str
     kind: str
     raw_path: Path
-    raw_schema: dict[str, pl.DataType]
+    raw_schema: dict[str, PolarsDType]
     flat_expected_cols: list[str]
     allow_new_columns: bool = True
 
 
-EVENT_STRUCT = pl.Struct([pl.Field("position", pl.Int64), pl.Field("value_prop", pl.Utf8)])
+EVENT_STRUCT: pl.Struct = pl.Struct(
+    [pl.Field("position", pl.Int64), pl.Field("value_prop", pl.Utf8)]
+)
 
-PAYS_RAW_SCHEMA = {
+PAYS_RAW_SCHEMA: dict[str, PolarsDType] = {
     "pay_date": pl.Date,
     "total": pl.Float64,
     "user_id": pl.Int64,
     "value_prop": pl.Utf8,
 }
-EVENTS_RAW_SCHEMA = {
+
+EVENTS_RAW_SCHEMA: dict[str, PolarsDType] = {
     "day": pl.Date,
     "event_data": EVENT_STRUCT,
     "user_id": pl.Int64,
 }
+
 EVENTS_FLAT_COLS = ["day", "position", "value_prop", "user_id"]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

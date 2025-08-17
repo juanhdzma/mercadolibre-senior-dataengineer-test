@@ -13,5 +13,7 @@ def read_raw(spec: DatasetSpec) -> pl.DataFrame:
         df = pl.read_ndjson(spec.raw_path, schema=spec.raw_schema)
     else:
         raise ValueError(spec.kind)
-    log.info("read_raw_ok", dataset=spec.name, rows=df.height, cols=list(df.columns))
+    log.info(
+        "read_raw_ok", dataset=spec.name, rows=df.height, cols=list(df.columns)
+    )
     return df

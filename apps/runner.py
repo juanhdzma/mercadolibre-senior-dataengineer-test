@@ -1,7 +1,8 @@
 from __future__ import annotations
-import argparse, os, sys
+import argparse
+import os
+import sys
 from datetime import date
-import numpy as np
 from dotenv import load_dotenv
 from src.adapters.logging import get_logger
 from src.application.dq_and_load import load_and_prepare_all
@@ -11,13 +12,15 @@ log = get_logger()
 
 
 def _resolve_run_date(cli: str | None, default_str: str = "today") -> str:
-    return date.today().isoformat() if (cli is None and default_str.lower() == "today") else (cli or default_str)
+    return (
+        date.today().isoformat()
+        if (cli is None and default_str.lower() == "today")
+        else (cli or default_str)
+    )
 
 
 def main():
     load_dotenv()
-
-    np.array([1]) / 0
 
     p = argparse.ArgumentParser(description="ETL pays/taps/prints")
     p.add_argument("--date", dest="ds", default=None, help="YYYY-MM-DD")

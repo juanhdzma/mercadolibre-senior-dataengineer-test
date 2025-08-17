@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # instala tus deps del proyecto
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          # herramientas de CI
+          pip install pytest pytest-cov flake8 mypy bandit pip-audit
+
+      # -------- TIPADO --------
+      - name: Type check (mypy)
+        run: mypy src tests
+
+      # -------- LINT --------
+      - name: Lint (flake8)
+        run: flake8 src tests
+
+      # -------- SEGURIDAD: BANDIT --------
+      # Falla con cualquier hallazgo (low/medium/high con cualquier nivel de confianza)
+      - name: Security scan (Bandit)
+        run: |
+          bandit -r src --severity-level low --confidence-level low -f txt -o bandit-report.txt
+          cat bandit-report.txt
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.txt
+
+      # -------- SEGURIDAD: DEPENDENCIAS --------
+      - name: Dependency audit (pip-audit)
+        run: |
+          # Audita archivos de requirements si existen; en proyectos con -e, saltar editables
+          if [ -f requirements.txt ] || [ -f requirements-dev.txt ]; then
+            ARGS=""
+            if [ -f requirements.txt ]; then ARGS="$ARGS -r requirements.txt"; fi
+            if [ -f requirements-dev.txt ]; then ARGS="$ARGS -r requirements-dev.txt"; fi
+            pip-audit $ARGS --strict
+          else
+            pip-audit --skip-editable --strict
+          fi
+
+      # -------- TESTS + COVERAGE --------
+      - name: Tests + coverage
+        run: |
+          pytest --maxfail=1 -ra \
+                 --cov=src \
+                 --cov-report=term-missing \
+                 --cov-report=xml
+
+      - name: Upload coverage.xml
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+      - name: HTML coverage (artifact)
+        if: always()
+        run: pytest --cov=src --cov-report=html
+
+      - name: Upload htmlcov
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov
+          path: htmlcov

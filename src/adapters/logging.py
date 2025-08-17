@@ -1,4 +1,7 @@
-import sys, logging, warnings, structlog
+import sys
+import logging
+import warnings
+import structlog
 from structlog.stdlib import ProcessorFormatter
 
 
@@ -13,7 +16,9 @@ def get_logger():
             foreign_pre_chain=[
                 structlog.stdlib.add_logger_name,
                 structlog.stdlib.add_log_level,
-                structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False, key="ts"),
+                structlog.processors.TimeStamper(
+                    fmt="%Y-%m-%d %H:%M:%S", utc=False, key="ts"
+                ),
             ],
         )
     )
@@ -25,7 +30,9 @@ def get_logger():
     logging.captureWarnings(True)
     logging.getLogger("py.warnings").propagate = True
 
-    def warning_to_log(message, category, filename, lineno, file=None, line=None):
+    def warning_to_log(
+        message, category, filename, lineno, file=None, line=None
+    ):
         logging.getLogger("py.warnings").warning(
             f"{category.__name__}: {message}",
             extra={
@@ -55,7 +62,9 @@ def get_logger():
                     structlog.processors.CallsiteParameter.PROCESS,
                 ]
             ),
-            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False, key="ts"),
+            structlog.processors.TimeStamper(
+                fmt="%Y-%m-%d %H:%M:%S", utc=False, key="ts"
+            ),
             ProcessorFormatter.wrap_for_formatter,
         ],
         context_class=dict,

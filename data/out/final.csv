@@ -1,0 +1,12 @@
+day,position,value_prop,user_id,cantidad_vistas,cantidad_taps,hizo_click,cantidad_pagos,total_pagos
+2020-11-01,0,cellphone_recharge,98702,1,1,true,0,0
+2020-11-01,1,prepaid,98702,1,0,false,0,0
+2020-11-01,0,prepaid,63252,1,0,false,0,0
+2020-11-01,0,cellphone_recharge,24728,1,0,false,0,0
+2020-11-01,1,link_cobro,24728,1,0,false,0,0
+2020-11-01,2,credits_consumer,24728,1,0,false,0,0
+2020-11-01,3,point,24728,1,0,false,0,0
+2020-11-01,0,point,25517,1,0,false,0,0
+2020-11-01,1,credits_consumer,25517,1,0,false,0,0
+2020-11-01,2,transport,25517,1,0,false,0,0
+2020-11-01,0,point,57587,1,0,false,0,0

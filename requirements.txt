@@ -1,0 +1,4 @@
+-e git+https://github.com/juanhdzma/mercadolibre-senior-dataengineer-test.git@cd4fa50c414e2b3a87c1dd88b49998a6b7227a42#egg=mercadolibre_senior_dataengineer_test
+polars==1.32.3
+python-dotenv==1.1.1
+structlog==25.4.0
