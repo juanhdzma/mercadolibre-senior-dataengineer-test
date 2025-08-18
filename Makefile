@@ -21,4 +21,5 @@ test:
 	       --cov-fail-under=80
 
 run-local:
+	cp envs/local.env .env
 	python -m apps.runner

@@ -1,7 +1,7 @@
 {
   "dataset": "pays",
   "stage": "raw",
-  "rows": 756483,
+  "rows": 10,
   "missing_columns": [],
   "new_columns": [],
   "expected_schema": {

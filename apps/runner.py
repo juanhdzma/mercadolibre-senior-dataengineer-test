@@ -1,7 +1,6 @@
 from __future__ import annotations
 import sys
 from datetime import date
-from dotenv import load_dotenv
 from src.adapters.logging import get_logger
 from src.application.dq_and_load import load_and_prepare_all
 from src.application.transform_service import build_output_and_export
@@ -10,8 +9,6 @@ log = get_logger()
 
 
 def main():
-    load_dotenv()
-
     today = date.today().isoformat()
     log.info("run_start", today=today)
 
