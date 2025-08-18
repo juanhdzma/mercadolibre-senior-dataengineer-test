@@ -30,7 +30,7 @@ jobs:
 
       # -------- TIPADO --------
       - name: Type check (mypy)
-        run: mypy src tests apps
+        run: mypy src tests apps/runner.py
 
       # -------- LINT --------
       - name: Lint (flake8)

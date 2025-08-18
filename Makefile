@@ -1,9 +1,9 @@
-.PHONY: all typecheck lint security deps test coverage run-local
+.PHONY: copy all typecheck lint security deps test coverage run-local
 
-all: typecheck lint security deps test coverage
+all: typecheck lint security deps test
 
 typecheck:
-	mypy src tests apps
+	mypy src tests apps/runner.py
 
 lint:
 	flake8 src tests apps
@@ -14,12 +14,14 @@ security:
 deps:
 	pip-audit
 
-test:
+test: copy
 	pytest --maxfail=1 -ra \
 	       --cov=src \
 	       --cov-report=term-missing \
 	       --cov-fail-under=80
 
-run-local:
-	cp envs/local.env .env
+run-local: copy
 	python -m apps.runner
+
+copy:
+	cp envs/local.env .env

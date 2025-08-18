@@ -7,20 +7,17 @@ from tests.unit.data.prints import df_prints_raw
 
 def test_pays_raw_schema_ok():
     spec = DATASETS["pays"]
-    df = df_pays_raw
-    ok, _ = validate_raw_schema(spec, df=df, strict=True)
+    ok, _ = validate_raw_schema(spec, df=df_pays_raw, strict=True)
     assert ok
 
 
 def test_taps_raw_schema_ok():
     spec = DATASETS["taps"]
-    df = df_taps_raw
-    ok, _ = validate_raw_schema(spec, df=df, strict=True)
+    ok, _ = validate_raw_schema(spec, df=df_taps_raw, strict=True)
     assert ok
 
 
 def test_prints_raw_schema_ok():
     spec = DATASETS["prints"]
-    df = df_prints_raw
-    ok, _ = validate_raw_schema(spec, df=df, strict=True)
+    ok, _ = validate_raw_schema(spec, df=df_prints_raw, strict=True)
     assert ok

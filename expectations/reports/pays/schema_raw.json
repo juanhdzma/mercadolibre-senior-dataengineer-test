@@ -4,6 +4,7 @@
   "rows": 10,
   "missing_columns": [],
   "new_columns": [],
+  "wrong_types": [],
   "expected_schema": {
     "pay_date": "Date",
     "total": "Float64",

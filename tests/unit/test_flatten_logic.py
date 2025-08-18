@@ -1,8 +1,8 @@
 from __future__ import annotations
 import json
+import logging
 from pathlib import Path
 import polars as pl
-import logging
 from polars.testing import assert_frame_equal
 from src.application.flatten import flatten_events, validate_flat_columns
 

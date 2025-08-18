@@ -10,35 +10,39 @@ def strip_ansi(s: str) -> str:
     return ANSI_ESCAPE.sub("", s)
 
 
-def test_get_logger_returns_bound_logger():
+def test_get_logger_returns_bound_logger() -> None:
     log = get_logger()
     assert hasattr(log, "bind")
     assert hasattr(log, "info")
 
 
-def test_root_logger_and_handler_configured():
+def test_root_logger_and_handler_configured() -> None:
     get_logger()
     root = logging.getLogger()
     assert len(root.handlers) == 1
+
     handler = root.handlers[0]
     assert handler.level == logging.INFO
     assert root.level == logging.INFO
+
     from structlog.stdlib import ProcessorFormatter
 
     assert isinstance(handler.formatter, ProcessorFormatter)
 
 
-def test_info_event_is_rendered(capsys):
+def test_info_event_is_rendered(capsys) -> None:
     log = get_logger()
     log.info("hello_world", foo=123)
+
     out = strip_ansi(capsys.readouterr().out)
     assert "hello_world" in out
     assert "foo=123" in out
 
 
-def test_warnings_are_redirected_to_logging(capsys):
+def test_warnings_are_redirected_to_logging(capsys) -> None:
     get_logger()
     warnings.warn("going away soon", DeprecationWarning)
+
     out = strip_ansi(capsys.readouterr().out)
     assert "DeprecationWarning: going away soon" in out
     assert "py.warnings" in out

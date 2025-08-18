@@ -1,27 +1,28 @@
 from __future__ import annotations
-from pathlib import Path
-from json import JSONDecodeError
 import json
 import re
+import os
 from datetime import datetime
+from typing import Any, Mapping
 import polars as pl
+from polars.datatypes import DataType, DataTypeClass
+import fsspec  # type: ignore[import-untyped]
 from src.adapters.logging import get_logger
 from src.domain.schema_registry import DatasetSpec
-from typing import Type, Union, TypeAlias, cast
-from src.config.paths import EXPECTATIONS_REPORTS_DIR
-
-PolarsDType: TypeAlias = Union[Type[pl.DataType], pl.DataType]
-TemporalDType: TypeAlias = Union[
-    Type[pl.Date], Type[pl.Datetime], pl.Date, pl.Datetime
-]
 
 log = get_logger()
+
+REPORT_BASE = os.getenv(
+    "EXPECTATIONS_REPORTS_DIR", "expectations/reports"
+).rstrip("/")
 
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?((\d+(\.\d*)?)|(\.\d+))([eE][+-]?\d+)?$")
 
+PolarsDType = DataType | DataTypeClass
 
-def _is_int_like(x) -> bool:
+
+def _is_int_like(x: Any) -> bool:
     if x is None:
         return True
     if isinstance(x, int):
@@ -31,7 +32,7 @@ def _is_int_like(x) -> bool:
     return False
 
 
-def _is_float_like(x) -> bool:
+def _is_float_like(x: Any) -> bool:
     if x is None:
         return True
     if isinstance(x, (int, float)):
@@ -41,28 +42,28 @@ def _is_float_like(x) -> bool:
     return False
 
 
-def _is_bool_like(x) -> bool:
+def _is_bool_like(x: Any) -> bool:
     if x is None:
         return True
     if isinstance(x, bool):
         return True
-    if isinstance(x, str):
-        return x.strip().lower() in {
-            "true",
-            "false",
-            "1",
-            "0",
-            "t",
-            "f",
-            "yes",
-            "no",
-        }
-    if isinstance(x, (int, float)):
-        return x in {0, 1}
+    if isinstance(x, (int, float)) and x in {0, 1}:
+        return True
+    if isinstance(x, str) and x.strip().lower() in {
+        "true",
+        "false",
+        "1",
+        "0",
+        "t",
+        "f",
+        "yes",
+        "no",
+    }:
+        return True
     return False
 
 
-def _is_date_like(x) -> bool:
+def _is_date_like(x: Any) -> bool:
     if x is None:
         return True
     if isinstance(x, datetime):
@@ -70,38 +71,58 @@ def _is_date_like(x) -> bool:
     if isinstance(x, str):
         s = x.strip()
         try:
-            if "T" in s:
+            (
                 datetime.fromisoformat(s.replace("Z", "+00:00"))
-            else:
-                datetime.fromisoformat(s)
+                if "T" in s
+                else datetime.fromisoformat(s)
+            )
             return True
         except Exception:
             return False
     return False
 
 
-def _csv_columns(path: Path) -> list[str]:
-    return pl.read_csv(path, n_rows=0).columns
+def _write_text(path: str, text: str) -> str:
+    with fsspec.open(path, "w") as f:
+        f.write(text)
+    return path
 
 
-def _csv_rowcount(path: Path) -> int:
+def _write_report(dataset: str, stage: str, payload: dict) -> str:
+    dir_base = f"{REPORT_BASE}/{dataset}"
+    filename = f"schema_{stage}.json"
+    full = f"{dir_base}/{filename}"
+    return _write_text(full, json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _csv_columns(uri: str) -> list[str]:
+    return pl.read_csv(uri, n_rows=0).columns
+
+
+def _csv_rowcount(uri: str) -> int:
     return int(
-        pl.scan_csv(path, infer_schema_length=0)
+        pl.scan_csv(uri, infer_schema_length=0)
         .select(pl.len())
         .collect()
         .item()
     )
 
 
+def _resolve_temporal_dtype(
+    t: PolarsDType,
+) -> type[pl.Date] | type[pl.Datetime]:
+    return pl.Date if t == pl.Date else pl.Datetime
+
+
 def _invalid_token_counts_csv(
-    path: Path, expected: dict[str, PolarsDType]
+    uri: str, expected: Mapping[str, PolarsDType]
 ) -> dict[str, int]:
-    present = set(_csv_columns(path))
+    present = set(_csv_columns(uri))
     cols = [c for c in expected.keys() if c in present]
     if not cols:
         return {}
     lf = pl.scan_csv(
-        path,
+        uri,
         schema_overrides={c: pl.Utf8 for c in cols},
         infer_schema_length=0,
         ignore_errors=True,
@@ -134,9 +155,10 @@ def _invalid_token_counts_csv(
                 )
             ) & s.is_not_null()
         elif t in (pl.Date, pl.Datetime):
-            temporal = cast(TemporalDType, t)
             invalid = (
-                s.str.strptime(temporal, strict=False).is_null()
+                s.str.strptime(
+                    _resolve_temporal_dtype(t), strict=False
+                ).is_null()
                 & s.is_not_null()
             )
         else:
@@ -147,11 +169,11 @@ def _invalid_token_counts_csv(
 
 
 def _ndjson_keys_and_rowcount(
-    path: Path, limit_keys: int = 20000
+    uri: str, limit_keys: int = 20000
 ) -> tuple[set[str], int]:
     keys: set[str] = set()
     n = 0
-    with open(path, "r", encoding="utf-8") as f:
+    with fsspec.open(uri, "r") as f:
         for line in f:
             s = line.strip()
             if not s:
@@ -160,16 +182,15 @@ def _ndjson_keys_and_rowcount(
             if len(keys) < limit_keys:
                 try:
                     obj = json.loads(s)
-                except JSONDecodeError:
-                    log.debug("ndjson_bad_line_skip_keys", line_no=n)
-                    continue
-                if isinstance(obj, dict):
-                    keys.update(obj.keys())
+                    if isinstance(obj, dict):
+                        keys.update(obj.keys())
+                except Exception as e:
+                    log.debug("ndjson_parse_error", error=str(e))
     return keys, n
 
 
 def _invalid_token_counts_ndjson(
-    path: Path, expected: dict[str, PolarsDType]
+    uri: str, expected: Mapping[str, PolarsDType]
 ) -> dict[str, int]:
     checks = {
         k: v for k, v in expected.items() if not isinstance(v, pl.Struct)
@@ -177,15 +198,15 @@ def _invalid_token_counts_ndjson(
     if not checks:
         return {}
     counts = {k: 0 for k in checks.keys()}
-    with open(path, "r", encoding="utf-8") as f:
+    with fsspec.open(uri, "r") as f:
         for line in f:
             s = line.strip()
             if not s:
                 continue
             try:
                 obj = json.loads(s)
-            except JSONDecodeError:
-                log.debug("ndjson_bad_line_skip_count", sample=s[:120])
+            except Exception as e:
+                log.debug("ndjson_line_error", error=str(e))
                 continue
             if not isinstance(obj, dict):
                 continue
@@ -216,82 +237,66 @@ def _invalid_token_counts_ndjson(
     return {k: v for k, v in counts.items() if v > 0}
 
 
-def _write_report(path: Path, payload: dict) -> str:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
-    return str(path)
-
-
-def validate_raw_schema(
+def validate_raw_schema_pays(
     spec: DatasetSpec, df: pl.DataFrame | None = None, strict: bool = True
 ) -> tuple[bool, str]:
     try:
-        if spec.kind == "pays":
-            present_raw = set(_csv_columns(spec.raw_path))
-            rowcount = (
-                df.height if df is not None else _csv_rowcount(spec.raw_path)
-            )
-            invalid_tokens = _invalid_token_counts_csv(
-                spec.raw_path, spec.raw_schema
-            )
-        else:
-            keys, rowcount = _ndjson_keys_and_rowcount(spec.raw_path)
-            present_raw = set(keys)
-            invalid_tokens = _invalid_token_counts_ndjson(
-                spec.raw_path, spec.raw_schema
-            )
+        present = set(_csv_columns(spec.raw_path))
+        rowcount = (
+            df.height if df is not None else _csv_rowcount(spec.raw_path)
+        )
+        invalid_tokens = _invalid_token_counts_csv(
+            spec.raw_path, spec.raw_schema
+        )
     except Exception as e:
-        out_dir = EXPECTATIONS_REPORTS_DIR / spec.name
-        out_path = out_dir / "schema_raw.json"
-        report = {
-            "dataset": spec.name,
-            "stage": "raw",
-            "rows": 0,
-            "missing_columns": [],
-            "new_columns": [],
-            "wrong_types": [],
-            "expected_schema": {k: str(v) for k, v in spec.raw_schema.items()},
-            "source_columns": [],
-            "read_error": str(e),
-            "ok": False,
-        }
-        rp = _write_report(out_path, report)
+        rp = _write_report(
+            spec.name,
+            "raw",
+            {
+                "dataset": spec.name,
+                "stage": "raw",
+                "rows": 0,
+                "missing_columns": [],
+                "new_columns": [],
+                "wrong_types": [],
+                "expected_schema": {
+                    k: str(v) for k, v in spec.raw_schema.items()
+                },
+                "source_columns": [],
+                "read_error": str(e),
+                "ok": False,
+            },
+        )
         log.error("raw_read_error", dataset=spec.name, report=rp, error=str(e))
         return False, rp
-
     exp_cols = set(spec.raw_schema.keys())
-    missing = sorted(list(exp_cols - present_raw))
-    new_cols = sorted(list(present_raw - exp_cols))
-
+    missing = sorted(list(exp_cols - present))
+    new_cols = sorted(list(present - exp_cols))
     wrong_types = [
         {"column": c, "expected": str(spec.raw_schema[c])}
         for c, n in sorted(invalid_tokens.items())
         if n > 0
     ]
-
-    out_dir = EXPECTATIONS_REPORTS_DIR / spec.name
-    out_path = out_dir / "schema_raw.json"
     ok = (
         (not missing)
         and (not wrong_types)
         and (spec.allow_new_columns or not new_cols)
     )
-
-    report = {
-        "dataset": spec.name,
-        "stage": "raw",
-        "rows": int(rowcount),
-        "missing_columns": missing,
-        "new_columns": new_cols,
-        "expected_schema": {k: str(v) for k, v in spec.raw_schema.items()},
-        "source_columns": sorted(list(present_raw)),
-        "ok": ok,
-    }
-    if wrong_types:
-        report["wrong_types"] = wrong_types
-
-    rp = _write_report(out_path, report)
-
+    rp = _write_report(
+        spec.name,
+        "raw",
+        {
+            "dataset": spec.name,
+            "stage": "raw",
+            "rows": int(rowcount),
+            "missing_columns": missing,
+            "new_columns": new_cols,
+            "wrong_types": wrong_types,
+            "expected_schema": {k: str(v) for k, v in spec.raw_schema.items()},
+            "source_columns": sorted(list(present)),
+            "ok": ok,
+        },
+    )
     if missing or wrong_types:
         log.error(
             "raw_schema_error",
@@ -303,7 +308,6 @@ def validate_raw_schema(
         )
         if strict:
             return False, rp
-
     if new_cols and not spec.allow_new_columns and strict:
         log.error(
             "raw_schema_new_cols_error",
@@ -312,6 +316,129 @@ def validate_raw_schema(
             report=rp,
         )
         return False, rp
-
     log.info("raw_schema_ok", dataset=spec.name, report=rp)
     return True, rp
+
+
+def validate_raw_schema_events(
+    spec: DatasetSpec, df: pl.DataFrame | None = None, strict: bool = True
+) -> tuple[bool, str]:
+    try:
+        keys, rowcount = _ndjson_keys_and_rowcount(spec.raw_path)
+        present = set(keys)
+        invalid_tokens = _invalid_token_counts_ndjson(
+            spec.raw_path, spec.raw_schema
+        )
+    except Exception as e:
+        rp = _write_report(
+            spec.name,
+            "raw",
+            {
+                "dataset": spec.name,
+                "stage": "raw",
+                "rows": 0,
+                "missing_columns": [],
+                "new_columns": [],
+                "wrong_types": [],
+                "expected_schema": {
+                    k: str(v) for k, v in spec.raw_schema.items()
+                },
+                "source_columns": [],
+                "read_error": str(e),
+                "ok": False,
+            },
+        )
+        log.error("raw_read_error", dataset=spec.name, report=rp, error=str(e))
+        return False, rp
+    exp_cols = set(spec.raw_schema.keys())
+    missing = sorted(list(exp_cols - present))
+    new_cols = sorted(list(present - exp_cols))
+    wrong_types = [
+        {"column": c, "expected": str(spec.raw_schema[c])}
+        for c, n in sorted(invalid_tokens.items())
+        if n > 0
+    ]
+    ok = (
+        (not missing)
+        and (not wrong_types)
+        and (spec.allow_new_columns or not new_cols)
+    )
+    rp = _write_report(
+        spec.name,
+        "raw",
+        {
+            "dataset": spec.name,
+            "stage": "raw",
+            "rows": int(rowcount),
+            "missing_columns": missing,
+            "new_columns": new_cols,
+            "wrong_types": wrong_types,
+            "expected_schema": {k: str(v) for k, v in spec.raw_schema.items()},
+            "source_columns": sorted(list(present)),
+            "ok": ok,
+        },
+    )
+    if missing or wrong_types:
+        log.error(
+            "raw_schema_error",
+            dataset=spec.name,
+            missing=missing,
+            wrong_types=wrong_types,
+            new_columns=new_cols,
+            report=rp,
+        )
+        if strict:
+            return False, rp
+    if new_cols and not spec.allow_new_columns and strict:
+        log.error(
+            "raw_schema_new_cols_error",
+            dataset=spec.name,
+            new=new_cols,
+            report=rp,
+        )
+        return False, rp
+    log.info("raw_schema_ok", dataset=spec.name, report=rp)
+    return True, rp
+
+
+def validate_flat_columns(
+    spec: DatasetSpec, df_flat: pl.DataFrame, strict: bool = True
+) -> tuple[bool, str]:
+    expected_cols = spec.flat_expected_cols
+    present_cols = list(df_flat.columns)
+    miss = [c for c in expected_cols if c not in present_cols]
+    extras = [c for c in present_cols if c not in expected_cols]
+    ok = (not miss) and (not extras)
+    rp = _write_report(
+        spec.name,
+        "flat",
+        {
+            "dataset": spec.name,
+            "stage": "flat",
+            "expected_columns": expected_cols,
+            "present_columns": present_cols,
+            "missing_columns": miss,
+            "new_columns": extras,
+            "ok": ok,
+        },
+    )
+    if miss or extras:
+        log.error(
+            "flat_schema_error",
+            dataset=spec.name,
+            missing=miss,
+            new_columns=extras,
+            report=rp,
+        )
+        if strict:
+            return False, rp
+    log.info("flat_schema_ok", dataset=spec.name, report=rp)
+    return True, rp
+
+
+def validate_raw_schema(
+    spec: DatasetSpec, df: pl.DataFrame | None = None, strict: bool = True
+) -> tuple[bool, str]:
+    if spec.kind == "pays":
+        return validate_raw_schema_pays(spec, df, strict)
+    return validate_raw_schema_events(spec, df, strict)

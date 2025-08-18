@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import polars as pl
 import src.application.validation as val
+from src.domain.schema_registry import DatasetSpec
 
 
 def _cleanup_report(rp: str):
@@ -236,3 +237,126 @@ def test_validate_raw_schema_wrong_types_and_newcols_combo(tmp_path):
     assert ok and "y" in data["new_columns"]
     assert any(w["column"] == "x" for w in data.get("wrong_types", []))
     _cleanup_report(rp)
+
+
+def test_is_int_like_non_numeric_types():
+    assert not val._is_int_like([])
+    assert not val._is_int_like({})
+
+
+def test_is_float_like_non_numeric_types():
+    class X:
+        pass
+
+    assert not val._is_float_like(X())
+
+
+def test_resolve_temporal_dtype():
+    assert val._resolve_temporal_dtype(pl.Date) is pl.Date
+    assert val._resolve_temporal_dtype(pl.Datetime) is pl.Datetime
+
+
+def test_invalid_token_counts_csv_dates(tmp_path):
+    p = tmp_path / "d.csv"
+    p.write_text("d,dt\n2020-01-01,2020-01-01T00:00:00\nbad,also-bad\n")
+    out = val._invalid_token_counts_csv(p, {"d": pl.Date, "dt": pl.Datetime})
+    assert out["d"] >= 1 and out["dt"] >= 1
+
+
+def test_invalid_token_counts_csv_no_overlap_returns_empty(tmp_path):
+    p = tmp_path / "x.csv"
+    p.write_text("a\n1\n")
+    out = val._invalid_token_counts_csv(p, {"z": pl.Int64})
+    assert out == {}
+
+
+def test_invalid_token_counts_ndjson_mixed_types(tmp_path):
+    p = tmp_path / "m.json"
+    p.write_text(
+        "\n".join(
+            [
+                '{"b":"true","f":"3.14","d":"2020-01-01"}',
+                '{"b":"maybe","f":"xx","d":"notadate"}',
+            ]
+        )
+    )
+    out = val._invalid_token_counts_ndjson(
+        p, {"b": pl.Boolean, "f": pl.Float64, "d": pl.Date}
+    )
+    assert out["b"] == 1 and out["f"] == 1 and out["d"] == 1
+
+
+def test_validate_flat_columns_ok(tmp_path, monkeypatch):
+    spec = DatasetSpec(
+        name="ev_ok",
+        kind="events",
+        raw_path=Path("ignored"),
+        raw_schema={},
+        flat_expected_cols=["a", "b"],
+        allow_new_columns=True,
+    )
+    df = pl.DataFrame({"a": [1], "b": [2]})
+    monkeypatch.chdir(tmp_path)
+    ok, rp = val.validate_flat_columns(spec, df, strict=True)
+    assert ok is True
+    assert Path(rp).exists()
+    _cleanup_report(rp)
+
+
+def test_validate_flat_columns_missing_strict_true(tmp_path, monkeypatch):
+    spec = DatasetSpec(
+        name="ev_miss",
+        kind="events",
+        raw_path=Path("ignored"),
+        raw_schema={},
+        flat_expected_cols=["a", "b"],
+        allow_new_columns=True,
+    )
+    df = pl.DataFrame({"a": [1]})
+    monkeypatch.chdir(tmp_path)
+    ok, rp = val.validate_flat_columns(spec, df, strict=True)
+    assert ok is False
+    data = json.loads(Path(rp).read_text())
+    assert data["ok"] is False and "b" in data["missing_columns"]
+    _cleanup_report(rp)
+
+
+def test_validate_flat_columns_newcols_strict_false(tmp_path, monkeypatch):
+    spec = DatasetSpec(
+        name="ev_new",
+        kind="events",
+        raw_path=Path("ignored"),
+        raw_schema={},
+        flat_expected_cols=["a", "b"],
+        allow_new_columns=True,
+    )
+    df = pl.DataFrame({"a": [1], "b": [2], "extra": [9]})
+    monkeypatch.chdir(tmp_path)
+    ok, rp = val.validate_flat_columns(spec, df, strict=False)
+    assert ok is True
+    data = json.loads(Path(rp).read_text())
+    assert "extra" in data["new_columns"]
+    _cleanup_report(rp)
+
+
+def test_validate_raw_schema_events_ok(tmp_path):
+    nd = tmp_path / "ok.json"
+    nd.write_text('{"a":1,"when":"2020-01-01"}\n')
+    spec = DatasetSpec(
+        name="evt_ok",
+        kind="events",
+        raw_path=str(nd),
+        raw_schema={"a": pl.Int64, "when": pl.Date},
+        flat_expected_cols=[],
+        allow_new_columns=False,
+    )
+    ok, rp = val.validate_raw_schema(spec, strict=True)
+    assert ok is True
+    _cleanup_report(rp)
+
+
+def test_ndjson_keys_and_rowcount_errors_counted(tmp_path):
+    p = tmp_path / "keys.json"
+    p.write_text('{"k":1}\nnotjson\n{"k":2}\n')
+    keys, n = val._ndjson_keys_and_rowcount(p)
+    assert "k" in keys and n == 3

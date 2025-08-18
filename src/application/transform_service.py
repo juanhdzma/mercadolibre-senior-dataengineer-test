@@ -1,10 +1,8 @@
 from __future__ import annotations
-from pathlib import Path
+import fsspec  # type: ignore[import-untyped]
 import polars as pl
 from src.adapters.logging import get_logger
 from src.config.paths import OUT_DATA_DIR
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 log = get_logger()
 
@@ -33,7 +31,7 @@ def get_last_weeks(df: pl.DataFrame, column_name: str) -> pl.DataFrame:
     )
 
 
-def build_output_and_export(dfs: dict) -> tuple:
+def build_output_and_export(dfs: dict) -> tuple[str, str]:
     pays, taps, prints = dfs["pays"], dfs["taps"], dfs["prints"]
     out = get_last_week(prints, "day")
     counts = (
@@ -70,13 +68,11 @@ def build_output_and_export(dfs: dict) -> tuple:
     out = out.join(
         counts, on=["user_id", "value_prop"], how="left"
     ).with_columns(pl.col("total_pagos").fill_null(0).cast(pl.Int64))
-    out_dir = OUT_DATA_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = out_dir / "final.csv"
-    pq_path = out_dir / "final.parquet"
-    out.write_csv(csv_path)
-    out.write_parquet(pq_path)
-    log.info(
-        "export_done", rows=out.height, csv=str(csv_path), parquet=str(pq_path)
-    )
-    return (csv_path, pq_path)
+    csv_path = f"{OUT_DATA_DIR}/final.csv"
+    pq_path = f"{OUT_DATA_DIR}/final.parquet"
+    with fsspec.open(csv_path, "wb") as f:
+        out.write_csv(f)
+    with fsspec.open(pq_path, "wb") as f:
+        out.write_parquet(f)
+    log.info("export_done", rows=out.height, csv=csv_path, parquet=pq_path)
+    return csv_path, pq_path

@@ -1,9 +1,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TypeAlias, Union, Type
+import os
 import polars as pl
-from src.config.paths import RAW_DATA_DIR
 
 _PolarsBase = pl.DataType
 PolarsDType: TypeAlias = Union[Type[_PolarsBase], _PolarsBase]
@@ -13,7 +12,7 @@ PolarsDType: TypeAlias = Union[Type[_PolarsBase], _PolarsBase]
 class DatasetSpec:
     name: str
     kind: str
-    raw_path: Path
+    raw_path: str
     raw_schema: dict[str, PolarsDType]
     flat_expected_cols: list[str]
     allow_new_columns: bool = True
@@ -38,11 +37,22 @@ EVENTS_RAW_SCHEMA: dict[str, PolarsDType] = {
 
 EVENTS_FLAT_COLS = ["day", "position", "value_prop", "user_id"]
 
+RAW_DIR = os.getenv("RAW_DATA_DIR", "data/raw").rstrip("/")
+OUT_DIR = os.getenv("OUT_DATA_DIR", "data/out").rstrip("/")
+EXPECTATIONS_DIR = os.getenv(
+    "EXPECTATIONS_REPORTS_DIR", "expectations/reports"
+).rstrip("/")
+
+
+def _join(base: str, file: str) -> str:
+    return f"{base}/{file}"
+
+
 DATASETS: dict[str, DatasetSpec] = {
     "pays": DatasetSpec(
         name="pays",
         kind="pays",
-        raw_path=RAW_DATA_DIR / "pays.csv",
+        raw_path=_join(RAW_DIR, "pays.csv"),
         raw_schema=PAYS_RAW_SCHEMA,
         flat_expected_cols=[],
         allow_new_columns=True,
@@ -50,7 +60,7 @@ DATASETS: dict[str, DatasetSpec] = {
     "taps": DatasetSpec(
         name="taps",
         kind="events",
-        raw_path=RAW_DATA_DIR / "taps.json",
+        raw_path=_join(RAW_DIR, "taps.json"),
         raw_schema=EVENTS_RAW_SCHEMA,
         flat_expected_cols=EVENTS_FLAT_COLS,
         allow_new_columns=True,
@@ -58,7 +68,7 @@ DATASETS: dict[str, DatasetSpec] = {
     "prints": DatasetSpec(
         name="prints",
         kind="events",
-        raw_path=RAW_DATA_DIR / "prints.json",
+        raw_path=_join(RAW_DIR, "prints.json"),
         raw_schema=EVENTS_RAW_SCHEMA,
         flat_expected_cols=EVENTS_FLAT_COLS,
         allow_new_columns=True,

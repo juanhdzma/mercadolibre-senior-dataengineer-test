@@ -1,7 +1,17 @@
 {
   "dataset": "taps",
   "stage": "flat",
-  "rows": 5,
-  "missing_columns": [],
-  "ok": true
+  "rows": 1,
+  "expected_columns": [
+    "day",
+    "position"
+  ],
+  "present_columns": [
+    "day"
+  ],
+  "missing_columns": [
+    "position"
+  ],
+  "new_columns": [],
+  "ok": false
 }

@@ -4,6 +4,7 @@
   "rows": 50859,
   "missing_columns": [],
   "new_columns": [],
+  "wrong_types": [],
   "expected_schema": {
     "day": "Date",
     "event_data": "Struct({'position': Int64, 'value_prop': String})",
