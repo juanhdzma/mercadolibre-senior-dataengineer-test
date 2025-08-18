@@ -1,0 +1,168 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: etl_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U airflow -d airflow" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [ etl_net ]
+
+  minio:
+    image: minio/minio:latest
+    container_name: etl_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9001/minio/health/ready" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [ etl_net ]
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: etl_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ../data:/project_data:ro
+      - ./minio/create-buckets.sh:/create-buckets.sh
+    entrypoint: [ "/bin/sh", "create-buckets.sh" ]
+    restart: "no"
+    networks: [ etl_net ]
+
+  airflow-init:
+    build:
+      context: ..
+      dockerfile: infra/airflow/Dockerfile
+    image: airflow:local
+    container_name: etl_airflow_init
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      PYTHONPATH: /opt/airflow:/opt/airflow/src:/opt/airflow/apps
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: "true"
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio123
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
+      RAW_DATA_DIR: s3://raw
+      OUT_DATA_DIR: s3://out
+      EXPECTATIONS_REPORTS_DIR: s3://expectations/reports
+    volumes:
+      - ../apps:/opt/airflow/apps
+      - ../src:/opt/airflow/src
+      - ../apps/dags:/opt/airflow/dags
+      - ../data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ../envs/docker.env:/opt/airflow/.env:ro
+    entrypoint: >
+      bash -c " airflow db init &&
+                airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com || true "
+    restart: "no"
+    networks: [ etl_net ]
+
+  airflow-webserver:
+    image: airflow:local
+    container_name: etl_airflow_web
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /opt/airflow:/opt/airflow/src:/opt/airflow/apps
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: "true"
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio123
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
+      RAW_DATA_DIR: s3://raw
+      OUT_DATA_DIR: s3://out
+      EXPECTATIONS_REPORTS_DIR: s3://expectations/reports
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../apps:/opt/airflow/apps
+      - ../src:/opt/airflow/src
+      - ../apps/dags:/opt/airflow/dags
+      - ../data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ../envs/docker.env:/opt/airflow/.env:ro
+    command: airflow webserver --port 8080
+    restart: unless-stopped
+    networks: [ etl_net ]
+
+  airflow-scheduler:
+    image: airflow:local
+    container_name: etl_airflow_sched
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /opt/airflow:/opt/airflow/src:/opt/airflow/apps
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: "true"
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio123
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
+      RAW_DATA_DIR: s3://raw
+      OUT_DATA_DIR: s3://out
+      EXPECTATIONS_REPORTS_DIR: s3://expectations/reports
+    volumes:
+      - ../apps:/opt/airflow/apps
+      - ../src:/opt/airflow/src
+      - ../apps/dags:/opt/airflow/dags
+      - ../data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ../envs/docker.env:/opt/airflow/.env:ro
+    command: airflow scheduler
+    restart: unless-stopped
+    networks: [ etl_net ]
+
+volumes:
+  pg_data:
+  airflow_logs:
+  airflow_plugins:
+
+
+networks:
+  etl_net:
